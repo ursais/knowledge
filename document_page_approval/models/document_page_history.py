@@ -1,6 +1,8 @@
 # Copyright (C) 2013 Savoir-faire Linux (<http://www.savoirfairelinux.com>).
 # License AGPL-3.0 or later (http://www.gnu.org/licenses/agpl).
 
+import re
+
 from odoo import fields, models
 from odoo.exceptions import UserError
 from odoo.tools.translate import _
@@ -93,12 +95,14 @@ class DocumentPageHistory(models.Model):
                 raise UserError(
                     _(
                         "You are not authorized to do this.\r\n"
-                        "Only approvers with these groups can approve this: "
-                    )
-                    % ", ".join(
-                        [g.display_name for g in rec.page_id.approver_group_ids]
+                        "Only approvers with these groups can approve this: {}"
+                    ).format(
+                        ", ".join(
+                            [g.display_name for g in rec.page_id.approver_group_ids]
+                        )
                     )
                 )
+
             # Update state
             rec.write(
                 {
@@ -156,7 +160,7 @@ class DocumentPageHistory(models.Model):
             )
 
     def _compute_diff(self):
-        """Shows a diff between this version and the previous version"""
+        """Shows a cleaned-up diff between this version and the previous version."""
         history = self.env["document.page.history"]
         for rec in self:
             domain = [("page_id", "=", rec.page_id.id), ("state", "=", "approved")]
@@ -164,6 +168,10 @@ class DocumentPageHistory(models.Model):
                 domain.append(("approved_date", "<", rec.approved_date))
             prev = history.search(domain, limit=1, order="approved_date DESC")
             if prev:
-                rec.diff = self._get_diff(prev.id, rec.id)
+                raw_diff = self._get_diff(prev.id, rec.id)
             else:
-                rec.diff = self._get_diff(False, rec.id)
+                raw_diff = self._get_diff(False, rec.id)
+
+            cleaned_diff = re.sub(r'data-last-history-steps=".*?"', "", raw_diff)
+
+            rec.diff = cleaned_diff
